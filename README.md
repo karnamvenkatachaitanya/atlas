@@ -99,6 +99,31 @@ Outputs:
 - Random vs trained-like average reward
 - Reward curve image: `training/reward_curve.png`
 
+## OpenEnv Compliance
+
+ATLAS now includes an explicit OpenEnv adapter:
+
+- `AtlasOpenEnv` in `env/startup_env.py` subclasses `openenv.env.Env`
+- Implements required loop methods:
+  - `reset()`
+  - `step(action)`
+  - `render()`
+- Exposes:
+  - `action_space`
+  - `observation_space` (as alias to state space for Gym/tooling compatibility)
+
+Quick check:
+
+```powershell
+.\.venv\Scripts\python.exe training\check_openenv.py
+```
+
+Expected output includes:
+
+- `OpenEnv adapter reset ok`
+- several `step=...` lines
+- `OpenEnv adapter check passed.`
+
 ## 3-Minute Demo Flow
 
 1. Open dashboard and pick a scenario preset.

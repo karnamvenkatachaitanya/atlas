@@ -3,6 +3,7 @@ from typing import Dict, Tuple
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from openenv.env import Env as OpenEnvBase
 
 from env.events import maybe_event
 from env.presets import PRESETS
@@ -183,3 +184,31 @@ class AtlasStartupEnv(gym.Env):
 
     def render(self):
         return f"Day {self.day} {PHASES[self.phase_idx]} :: {self.state}"
+
+
+class AtlasOpenEnv(OpenEnvBase):
+    """
+    Explicit OpenEnv adapter for AtlasStartupEnv.
+    This keeps the same simulation dynamics while exposing OpenEnv's base Env usage.
+    """
+
+    def __init__(self, preset: str = "startup"):
+        self.core = AtlasStartupEnv(preset=preset)
+        super().__init__(
+            name="AtlasOpenEnv",
+            state_space=self.core.observation_space,
+            action_space=self.core.action_space,
+            episode_max_length=self.core.max_days * len(PHASES),
+        )
+        # Keep Gym-style aliases for compatibility with existing tooling.
+        self.observation_space = self.core.observation_space
+        self.action_space = self.core.action_space
+
+    def reset(self, seed=None, options=None):
+        return self.core.reset(seed=seed, options=options)
+
+    def step(self, action: int):
+        return self.core.step(action)
+
+    def render(self):
+        return self.core.render()
