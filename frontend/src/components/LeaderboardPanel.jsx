@@ -5,7 +5,7 @@ export default function LeaderboardPanel({ rows, onReplay, onPdf }) {
     <div className="card h-72 overflow-auto">
       <h2 className="font-semibold mb-2">Leaderboard</h2>
       <div className="space-y-2 text-sm">
-        {rows.map((row) => (
+        {Array.isArray(rows) && rows.map((row) => (
           <div key={row.id} className="border border-slate-800 rounded p-2">
             <div>
               Episode #{row.id} ({row.mode})
