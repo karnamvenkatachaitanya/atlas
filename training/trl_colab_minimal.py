@@ -16,7 +16,7 @@ from openenv.core import GenericEnvClient  # noqa: F401,E402
 from env.startup_env import ACTIONS, AtlasOpenEnv  # noqa: E402
 
 
-def _format_prompt(obs: np.ndarray) -> str:
+def _format_prompt(obs: np.ndarray, mandate: str = "General Management") -> str:
     # obs is shape (10,) from AtlasStartupEnv._obs()
     (
         cash,
@@ -33,7 +33,8 @@ def _format_prompt(obs: np.ndarray) -> str:
 
     return (
         "You are the CEO agent in a startup simulation.\n"
-        "Choose ONE action from the action list that improves long-term reward.\n\n"
+        f"Board Mandate: {mandate}\n\n"
+        "Choose ONE action from the action list that aligns with the Board Mandate.\n\n"
         f"State:\n"
         f"- cash_balance: {cash:.0f}\n"
         f"- revenue: {revenue:.0f}\n"
@@ -52,11 +53,26 @@ def _format_prompt(obs: np.ndarray) -> str:
     )
 
 
-def _heuristic_action(obs: np.ndarray) -> str:
-    # Minimal "teacher" policy: easy to justify, deterministic, and environment-driven.
+def _heuristic_action(obs: np.ndarray, mandate: str = "") -> str:
+    # Minimal "teacher" policy: mandate-aware to demonstrate instruction following.
     cash, revenue, burn_rate, morale, progress, csat, investor_trust, pending_tasks, crises, market_trend = (
         obs.tolist()
     )
+    
+    # Priority 1: Crisis management (always relevant)
+    if crises > 2 or csat < 40:
+        return "fix_bug_crisis"
+    
+    # Priority 2: Mandate alignment
+    m = mandate.lower()
+    if "growth" in m:
+        if progress < 80: return "assign_engineering_task"
+        return "launch_product"
+    if "cost" in m:
+        if cash < 300_000: return "reduce_costs"
+        return "negotiate_client"
+    
+    # Default: Heuristic
     if cash < 100_000:
         return "reduce_costs"
     if csat < 60:
@@ -72,14 +88,15 @@ def make_dataset(num_samples: int = 128) -> List[Tuple[str, str]]:
 
     pairs: List[Tuple[str, str]] = []
     for _ in range(num_samples):
-        prompt = _format_prompt(obs)
-        action_name = _heuristic_action(obs)
+        mandate = getattr(env, "mandate", "General Management")
+        prompt = _format_prompt(obs, mandate)
+        action_name = _heuristic_action(obs, mandate)
         pairs.append((prompt, action_name))
 
         action_idx = ACTIONS.index(action_name)
-        obs, _reward, terminated, truncated, _info = env.step(action_idx)
+        obs, _reward, terminated, truncated, info = env.step(action_idx)
         if terminated or truncated:
-            obs, _info = env.reset()
+            obs, info = env.reset()
 
     return pairs
 
@@ -123,7 +140,8 @@ def evaluate_policy(
         steps = 0
 
         while not done and steps < max_steps_per_episode:
-            prompt = _format_prompt(obs)
+            mandate = getattr(env, "mandate", "General Management")
+            prompt = _format_prompt(obs, mandate)
             inputs = tokenizer(prompt, return_tensors="pt")
             with torch.no_grad():
                 out = model.generate(
@@ -134,7 +152,7 @@ def evaluate_policy(
                 )
 
             gen = tokenizer.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-            action_name = _parse_action_from_text(gen) or _heuristic_action(obs)
+            action_name = _parse_action_from_text(gen) or _heuristic_action(obs, mandate)
             action_idx = ACTIONS.index(action_name)
 
             obs, reward, terminated, truncated, _info = env.step(action_idx)

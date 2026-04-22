@@ -8,7 +8,7 @@ pinned: false
 
 # ATLAS: Multi-Agent Startup Management Simulation
 
-> **OpenEnv Hackathon 2026** — Theme: Multi-Agent Interactions + Self-Improving Agent Systems
+> **OpenEnv Hackathon 2026** — Theme: Multi-Agent Interactions + Instruction Following + Self-Improving Agents
 
 ATLAS is a real-time startup simulation where an **AI CEO** coordinates multiple autonomous department agents over a **90-day quarter**. The environment is fully OpenEnv-compliant, Gym-compatible, and designed for training with Hugging Face TRL.
 
@@ -22,10 +22,10 @@ ATLAS is a real-time startup simulation where an **AI CEO** coordinates multiple
 
 Current LLMs are good at single-turn reasoning but struggle with:
 - **Multi-step strategic planning** under resource constraints
-- **Managing multiple agents** (department heads) simultaneously
+- **Instruction Following**: Adapting strategies based on dynamic Board mandates (e.g., Growth vs. Cost-Cutting)
 - **Recovering from crises** over long horizons (90 simulated days)
 
-ATLAS trains an LLM-based CEO agent to navigate hiring, product launches, financial crises, and market shocks — producing measurably better decisions after training.
+ATLAS trains an LLM-based CEO agent to navigate hiring, product launches, financial crises, and market shocks while strictly following strategic mandates — producing measurably better decisions after training.
 
 ---
 
@@ -40,6 +40,7 @@ ATLAS trains an LLM-based CEO agent to navigate hiring, product launches, financ
 ## Agent Capabilities
 
 The CEO agent is expected to demonstrate the following capabilities in a partially observable, dynamic world:
+- **Instruction following** by adapting policy to dynamic Board mandates (Growth, Cost-Cutting, Balanced)
 - **Multi-agent coordination** across Engineering, Sales, HR, Finance, and Customer Success actors
 - **Long-horizon planning** over a full 90-day quarter with delayed consequences
 - **Crisis response and recovery** under shocks (outages, resignations, market events)
@@ -50,10 +51,11 @@ The CEO agent is expected to demonstrate the following capabilities in a partial
 
 Each episode requires the agent to repeatedly perform structured decision tasks:
 - Choose one CEO action from the 13-action discrete space at each step
-- Prioritize product, hiring, finance, and customer decisions based on current state
+- Align decisions with the specific **Board Mandate** provided at the start of the episode
+- Prioritize product, hiring, finance, and customer decisions based on current state and mandate
 - Recover from negative events while preventing cascading failures
 - Maximize cumulative reward and terminal business health metrics
-- Generalize behavior across multiple presets and random event sequences
+- Generalize behavior across multiple mandates, presets, and random event sequences
 
 ### Reward Signal
 

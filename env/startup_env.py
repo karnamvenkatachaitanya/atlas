@@ -13,6 +13,12 @@ from openenv.core import Environment as OpenEnvBase
 from env.events import maybe_event
 from env.presets import PRESETS
 
+MANDATES = [
+    "Maximize Growth: Prioritize product progress and revenue even if burn rate increases.",
+    "Cost Efficiency: Minimize burn rate and preserve cash balance at all costs.",
+    "Balanced Stability: Maintain a healthy balance between employee morale and revenue.",
+]
+
 ACTIONS = [
     "hire_employee",
     "fire_employee",
@@ -49,9 +55,14 @@ class AtlasStartupEnv(gym.Env):
         self.reset()
 
     def reset(self, seed=None, options=None) -> Tuple[np.ndarray, Dict]:
+        import random
         cfg = PRESETS[self.preset]
         self.day = 1
         self.phase_idx = 0
+        self.mandate = options.get("mandate") if options else None
+        if not self.mandate:
+            self.mandate = random.choice(MANDATES)
+
         self.state = {
             "cash_balance": float(cfg["cash"]),
             "revenue": float(cfg["revenue"]),
@@ -64,7 +75,7 @@ class AtlasStartupEnv(gym.Env):
             "crises": 0.0,
             "market_trend": 0.0,
         }
-        return self._obs(), {"phase": PHASES[self.phase_idx], "day": self.day}
+        return self._obs(), {"phase": PHASES[self.phase_idx], "day": self.day, "mandate": self.mandate}
 
     def _obs(self) -> np.ndarray:
         s = self.state
@@ -205,13 +216,17 @@ class AtlasOpenEnv(OpenEnvBase):
         self.action_space = self.core.action_space
 
     def reset(self, seed=None, options=None):
-        return self.core.reset(seed=seed, options=options)
+        obs, info = self.core.reset(seed=seed, options=options)
+        self.mandate = info["mandate"]
+        return obs, info
 
     def step(self, action: int):
         return self.core.step(action)
 
     def state(self):
-        return self.core.state.copy()
+        s = self.core.state.copy()
+        s["mandate"] = getattr(self, "mandate", "None")
+        return s
 
     def render(self):
         return self.core.render()

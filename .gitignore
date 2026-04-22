@@ -5,3 +5,4 @@ __pycache__/
 atlas.db
 frontend/dist/
 .env
+scratch/

@@ -49,6 +49,7 @@ class SimulationService:
             "state": self.env.state.copy(),
             "day": info["day"],
             "phase": info["phase"],
+            "mandate": getattr(self.env, "mandate", "None"),
             "action": action_name,
             "reward": reward,
             "event": {"name": info.get("event")} if info.get("event") else None,
