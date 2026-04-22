@@ -118,6 +118,11 @@ def main() -> None:
         learning_rate=5e-5,
         logging_steps=5,
         save_steps=30,
+        # Colab often runs this notebook on CPU. Force CPU-safe settings so
+        # Transformers doesn't try bf16/fp16 GPU paths.
+        use_cpu=True,
+        bf16=False,
+        fp16=False,
         report_to=[],
     )
 
