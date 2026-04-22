@@ -101,7 +101,7 @@ def evaluate_policy(
     *,
     model,
     tokenizer,
-    episodes: int = 6,
+    episodes: int = 3,
     max_steps_per_episode: int = 90 * 3,
 ) -> List[float]:
     """
@@ -116,6 +116,7 @@ def evaluate_policy(
     rewards: List[float] = []
 
     for _ep in range(episodes):
+        print(f"  Starting episode {_ep + 1}/{episodes}...")
         obs, _info = env.reset()
         done = False
         total = 0.0
@@ -140,8 +141,11 @@ def evaluate_policy(
             total += float(reward)
             done = bool(terminated or truncated)
             steps += 1
+            if steps % 30 == 0:
+                print(f"    Step {steps}...")
 
         rewards.append(float(total))
+        print(f"  Episode {_ep + 1} finished with reward {total:.2f}")
 
     return rewards
 
@@ -158,6 +162,7 @@ def main() -> None:
     from trl import SFTConfig, SFTTrainer
     import matplotlib.pyplot as plt
 
+    print("Generating dataset from environment...")
     pairs = make_dataset(num_samples=128)
     ds = Dataset.from_dict(
         {
@@ -173,7 +178,8 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
     # Reward evidence: evaluate BEFORE training.
-    before_rewards = evaluate_policy(model=model, tokenizer=tokenizer, episodes=6)
+    print("Evaluating BEFORE training... (this may take a few minutes on CPU)")
+    before_rewards = evaluate_policy(model=model, tokenizer=tokenizer, episodes=3)
 
     out_dir = os.path.join("training", "trl_out")
     cfg = SFTConfig(
@@ -185,6 +191,7 @@ def main() -> None:
         logging_steps=5,
         save_steps=30,
         dataset_text_field="text",
+        packing=False,
         # Colab often runs this notebook on CPU. Force CPU-safe settings so
         # Transformers doesn't try bf16/fp16 GPU paths.
         use_cpu=True,
@@ -198,9 +205,9 @@ def main() -> None:
         args=cfg,
         train_dataset=ds,
         processing_class=tokenizer,
-        packing=False,
     )
 
+    print("Starting TRL SFT training...")
     trainer.train()
     trainer.save_model(out_dir)
     tokenizer.save_pretrained(out_dir)
@@ -208,8 +215,9 @@ def main() -> None:
     print(f"Saved TRL SFT model to: {out_dir}")
 
     # Reward evidence: evaluate AFTER training (reload from disk to match what judges re-run).
+    print("Evaluating AFTER training...")
     trained_model = AutoModelForCausalLM.from_pretrained(out_dir)
-    after_rewards = evaluate_policy(model=trained_model, tokenizer=tokenizer, episodes=6)
+    after_rewards = evaluate_policy(model=trained_model, tokenizer=tokenizer, episodes=3)
 
     print(f"Untrained avg reward: {float(np.mean(before_rewards)):.2f}")
     print(f"Trained avg reward:   {float(np.mean(after_rewards)):.2f}")
