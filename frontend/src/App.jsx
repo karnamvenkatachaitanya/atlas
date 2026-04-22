@@ -10,6 +10,8 @@ import StatsGrid from "./components/StatsGrid";
 import { api } from "./services/api";
 import { connectWS } from "./services/ws";
 
+const MAX_POINTS = 120;
+
 export default function App() {
   const [state, setState] = useState(null);
   const [mode, setMode] = useState("startup");
@@ -31,16 +33,18 @@ export default function App() {
         setDecisions((d) =>
           [{ day: payload.day, phase: payload.phase, action: payload.action }, ...d].slice(0, 30),
         );
-        setHistory((h) => [
-          ...h,
-          { step: h.length + 1, revenue: payload.state.revenue, cash: payload.state.cash_balance },
-        ]);
+        setHistory((h) =>
+          [
+            ...h,
+            { step: h.length + 1, revenue: payload.state.revenue, cash: payload.state.cash_balance },
+          ].slice(-MAX_POINTS),
+        );
       }
       if (data.type === "market_event" && data.payload?.event) {
         setEvents((e) => [data.payload.event, ...e].slice(0, 30));
       }
       if (data.type === "reward_update") {
-        setRewards((r) => [...r, { step: r.length + 1, reward: data.payload.reward }]);
+        setRewards((r) => [...r, { step: r.length + 1, reward: data.payload.reward }].slice(-MAX_POINTS));
       }
       if (data.type === "episode_done") {
         setDone(true);
@@ -89,8 +93,12 @@ export default function App() {
       await new Promise((resolve) => setTimeout(resolve, 200));
       setState(step.state);
       setDecisions((d) => [{ day: step.day, phase: step.phase, action: step.action }, ...d].slice(0, 30));
-      setRewards((r) => [...r, { step: r.length + 1, reward: step.reward }]);
-      setHistory((h) => [...h, { step: h.length + 1, revenue: step.state.revenue, cash: step.state.cash_balance }]);
+      setRewards((r) => [...r, { step: r.length + 1, reward: step.reward }].slice(-MAX_POINTS));
+      setHistory((h) =>
+        [...h, { step: h.length + 1, revenue: step.state.revenue, cash: step.state.cash_balance }].slice(
+          -MAX_POINTS,
+        ),
+      );
       if (step.event?.name) {
         setEvents((e) => [step.event.name, ...e].slice(0, 30));
       }

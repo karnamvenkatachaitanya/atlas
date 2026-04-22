@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+python-multipart
+websockets
+numpy
+pandas
+reportlab
+gymnasium
+openenv

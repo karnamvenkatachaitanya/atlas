@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API = "http://localhost:8000/api";
+const API = import.meta.env.VITE_API_BASE_URL || (window.location.origin + "/api");
 
 export const api = {
   getState: () => axios.get(`${API}/state`),

@@ -20,7 +20,15 @@ export default function RewardChart({ data }) {
           <XAxis dataKey="step" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
           <Tooltip />
-          <Line type="monotone" dataKey="reward" stroke="#f59e0b" dot={false} />
+          <Line
+            type="monotone"
+            dataKey="reward"
+            stroke="#f59e0b"
+            dot={false}
+            isAnimationActive
+            animationDuration={280}
+            animationEasing="linear"
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>

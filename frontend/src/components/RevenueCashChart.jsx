@@ -20,8 +20,24 @@ export default function RevenueCashChart({ data }) {
           <XAxis dataKey="step" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
           <Tooltip />
-          <Line type="monotone" dataKey="revenue" stroke="#22c55e" dot={false} />
-          <Line type="monotone" dataKey="cash" stroke="#38bdf8" dot={false} />
+          <Line
+            type="monotone"
+            dataKey="revenue"
+            stroke="#22c55e"
+            dot={false}
+            isAnimationActive
+            animationDuration={280}
+            animationEasing="linear"
+          />
+          <Line
+            type="monotone"
+            dataKey="cash"
+            stroke="#38bdf8"
+            dot={false}
+            isAnimationActive
+            animationDuration={280}
+            animationEasing="linear"
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>

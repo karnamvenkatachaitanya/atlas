@@ -1,7 +1,10 @@
 import asyncio
+import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 import backend.api as api_module
 from backend.api import router
@@ -45,3 +48,12 @@ async def ws_endpoint(ws: WebSocket):
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         ws_manager.disconnect(ws)
+
+# Mount frontend static files if they exist (for production deployment)
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+else:
+    @app.get("/")
+    def read_root():
+        return {"msg": "Frontend not built. Run 'npm run build' in frontend directory."}

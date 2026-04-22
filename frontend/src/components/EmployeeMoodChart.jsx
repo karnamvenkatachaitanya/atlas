@@ -20,7 +20,7 @@ export default function EmployeeMoodChart({ data }) {
           <XAxis dataKey="name" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
           <Tooltip />
-          <Bar dataKey="mood" fill="#a78bfa" />
+          <Bar dataKey="mood" fill="#a78bfa" isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

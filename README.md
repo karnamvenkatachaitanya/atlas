@@ -124,6 +124,25 @@ Expected output includes:
 - several `step=...` lines
 - `OpenEnv adapter check passed.`
 
+## Hugging Face Spaces Hosting (Judging Requirement)
+
+ATLAS is hosted on Hugging Face Spaces to satisfy the minimum judging requirement for an OpenEnv-compliant environment.
+
+- Space page: https://huggingface.co/spaces/nelluru/ATLAS
+- Live app: https://nelluru-atlas.hf.space
+
+Deployment files used by the Space:
+
+- `Dockerfile` (root-level, required by Docker Spaces)
+- `requirements-space.txt` (lightweight runtime dependencies for Space build stability)
+
+Verification checklist:
+
+1. Open `/docs` on the live app.
+2. Run `POST /api/reset` with a preset.
+3. Run `POST /api/step` with `action_idx`.
+4. Confirm successful responses and valid state transitions.
+
 ## 3-Minute Demo Flow
 
 1. Open dashboard and pick a scenario preset.
