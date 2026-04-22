@@ -11,3 +11,22 @@ description: >
 action_model: backend.openenv_models:AtlasAction
 observation_model: backend.openenv_models:AtlasObservation
 
+endpoints:
+  reset:
+    method: POST
+    path: /reset
+    body:
+      preset:
+        type: string
+        default: startup
+        enum: [startup, crisis, growth]
+  step:
+    method: POST
+    path: /step
+    body:
+      action_idx:
+        type: integer
+        description: Discrete action index (0-12)
+  state:
+    method: GET
+    path: /state
