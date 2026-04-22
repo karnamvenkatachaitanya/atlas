@@ -32,6 +32,8 @@ atlas/
  ??? docker/
  ??? README.md
  ??? requirements.txt
+ ??? requirements-space.txt
+ ??? Dockerfile
  ??? run_backend.ps1
  ??? run_frontend.ps1
 ```
@@ -130,6 +132,25 @@ Expected output includes:
 - `OpenEnv adapter reset ok`
 - several `step=...` lines
 - `OpenEnv adapter check passed.`
+
+## Minimum Requirements (Judging Checklist)
+
+This section maps the hackathon minimum requirements to concrete artifacts in this repo.
+
+1) **Usage of OpenEnv (latest release)**  
+- Dependency is pinned in `requirements.txt` and `requirements-space.txt` as `openenv-core==0.2.3`.  
+- OpenEnv adapter: `AtlasOpenEnv` in `env/startup_env.py`.
+
+2) **Minimal training script using Unsloth or HF TRL in Colab**  
+- Colab notebook: `training/TRL_Colab_Minimal.ipynb`  
+- Script it runs: `training/trl_colab_minimal.py` (generates data via the environment, then runs TRL `SFTTrainer`).
+
+3) **Mini-blog (HF) or mini-video (YouTube) < 2 minutes**  
+- Add your link here (required for judging): **TODO: paste blog/video link**
+
+4) **Hosted on Hugging Face Spaces**  
+- Space page: https://huggingface.co/spaces/nelluru/ATLAS  
+- Live app: https://nelluru-atlas.hf.space
 
 ## Hugging Face Spaces Hosting (Judging Requirement)
 

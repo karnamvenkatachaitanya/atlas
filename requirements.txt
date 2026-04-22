@@ -9,7 +9,7 @@ pandas
 matplotlib
 reportlab
 gymnasium
-openenv
+openenv-core==0.2.3
 trl
 transformers
 datasets
