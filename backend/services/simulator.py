@@ -5,6 +5,7 @@ from agents.employee import EmployeeAgent
 from agents.personalities import PERSONALITIES
 from backend.db import EpisodeLog, SessionLocal, StepLog
 from env.startup_env import ACTIONS, AtlasStartupEnv
+from backend.services.llm_service import LLMService
 
 
 class SimulationService:
@@ -17,6 +18,7 @@ class SimulationService:
         self.decision_log = []
         self.total_reward = 0.0
         self.episode_id = None
+        self.llm = LLMService()
         self.employee_agents = [
             EmployeeAgent("engineering_manager", PERSONALITIES["engineering_manager"]),
             EmployeeAgent("sales_lead", PERSONALITIES["sales_lead"]),
@@ -37,7 +39,10 @@ class SimulationService:
 
     def step(self, action_idx=None) -> Dict:
         if action_idx is None:
-            action_idx = random.randint(0, len(ACTIONS) - 1)
+            if self.llm.is_enabled():
+                action_idx = self.llm.get_action(self.env.state)
+            else:
+                action_idx = random.randint(0, len(ACTIONS) - 1)
         obs, reward, terminated, truncated, info = self.env.step(action_idx)
         self.obs = obs
         self.done = terminated or truncated

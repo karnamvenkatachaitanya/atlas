@@ -32,7 +32,11 @@ app.include_router(router)
 @app.on_event("startup")
 def startup():
     init_db()
-    api_module.ensure_sim()
+    sim_service = api_module.ensure_sim()
+    if sim_service.llm.is_enabled():
+        print("--- ATLAS AI Mode Active: LLM CEO is taking charge! ---")
+    else:
+        print("--- ATLAS Manual/Random Mode: No API keys found. ---")
 
 
 @app.websocket("/ws")
