@@ -150,6 +150,51 @@ For judging, use plots produced by this TRL run (trainer logs + model evaluation
 
 ---
 
+## AI CEO Mode (LLM Integration)
+
+ATLAS now supports an autonomous AI CEO mode that can be powered by several LLM providers. When an API key is provided, the backend will automatically use the LLM to make strategic decisions.
+
+### Supported Models & Environment Variables
+
+| Provider | Model Used | Environment Variable |
+|---|---|---|
+| **Google Gemini** | `gemini-1.5-flash` | `GEMINI_API_KEY` |
+| **OpenAI** | `gpt-3.5-turbo` | `OPENAI_API_KEY` |
+| **Anthropic** | `claude-3-haiku` | `ANTHROPIC_API_KEY` |
+| **Hugging Face** | `Mistral-7B-Instruct` | `HF_TOKEN` |
+
+*Note: If multiple keys are provided, the priority is Gemini > OpenAI > Anthropic > Hugging Face.*
+
+### Local Setup & Testing
+
+To test the AI CEO locally, you need to set the environment variable before running the backend.
+
+**Windows (PowerShell):**
+```powershell
+$env:GEMINI_API_KEY="your_key_here"
+.\run_backend.ps1
+```
+
+**Linux/Mac:**
+```bash
+export GEMINI_API_KEY="your_key_here"
+./run_backend.sh
+```
+
+Once the backend starts, you will see a log message:  
+`--- ATLAS AI Mode Active: LLM CEO is taking charge! ---`
+
+### Hugging Face Deployment
+
+To enable AI CEO on your Hugging Face Space:
+1. Go to **Settings** -> **Variables and Secrets**.
+2. Add a new **Secret** (e.g., `GEMINI_API_KEY`).
+3. Restart the Space.
+
+The dashboard will now show the AI making decisions in real-time!
+
+---
+
 ## Stack
 
 - **Backend:** Python 3.11, FastAPI, WebSocket, SQLite/SQLAlchemy

@@ -17,3 +17,5 @@ torch
 unsloth
 openai
 requests
+google-generativeai
+anthropic

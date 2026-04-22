@@ -9,9 +9,11 @@ class LLMService:
     def __init__(self):
         self.hf_token = os.getenv("HF_TOKEN")
         self.openai_key = os.getenv("OPENAI_API_KEY")
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        self.anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         
     def is_enabled(self):
-        return bool(self.hf_token or self.openai_key)
+        return bool(self.hf_token or self.openai_key or self.gemini_key or self.anthropic_key)
 
     def get_action(self, state_data):
         """
@@ -42,12 +44,47 @@ Your available actions:
 
 Reply with ONLY a single number from 0 to 10."""
 
-        if self.openai_key:
+        if self.gemini_key:
+            return self._call_gemini(prompt)
+        elif self.openai_key:
             return self._call_openai(prompt)
+        elif self.anthropic_key:
+            return self._call_anthropic(prompt)
         elif self.hf_token:
             return self._call_huggingface(prompt)
         else:
             return random.randint(0, 10)
+
+    def _call_gemini(self, prompt):
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=self.gemini_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            prediction = response.text.strip()
+            digits = "".join([c for c in prediction if c.isdigit()])
+            if digits:
+                return int(digits)
+        except Exception as e:
+            logger.error(f"Gemini API Error: {e}")
+        return random.randint(0, 10)
+
+    def _call_anthropic(self, prompt):
+        try:
+            from anthropic import Anthropic
+            client = Anthropic(api_key=self.anthropic_key)
+            message = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            prediction = message.content[0].text.strip()
+            digits = "".join([c for c in prediction if c.isdigit()])
+            if digits:
+                return int(digits)
+        except Exception as e:
+            logger.error(f"Anthropic API Error: {e}")
+        return random.randint(0, 10)
 
     def _call_huggingface(self, prompt):
         API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
