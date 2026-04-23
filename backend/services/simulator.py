@@ -40,7 +40,9 @@ class SimulationService:
     def step(self, action_idx=None) -> Dict:
         if action_idx is None:
             if self.llm.is_enabled():
-                action_idx = self.llm.get_action(self.env.state)
+                state_plus = self.env.state.copy()
+                state_plus["mandate"] = getattr(self.env, "mandate", "None")
+                action_idx = self.llm.get_action(state_plus)
             else:
                 action_idx = random.randint(0, len(ACTIONS) - 1)
         obs, reward, terminated, truncated, info = self.env.step(action_idx)

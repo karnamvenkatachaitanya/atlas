@@ -17,32 +17,40 @@ class LLMService:
 
     def get_action(self, state_data):
         """
-        Takes the state dictionary and returns an action index (0-10).
+        Takes the state dictionary and returns an action index (0-12).
         """
         revenue = state_data.get("revenue", 0)
         cash = state_data.get("cash_balance", 0)
         morale = state_data.get("employee_morale", 0)
+        trust = state_data.get("investor_trust", 0)
+        mandate = state_data.get("mandate", "Balanced Stability")
         
-        prompt = f"""You are the CPU/CEO of ATLAS.
+        prompt = f"""You are the CEO of ATLAS. 
+Your goal is to manage a startup over 90 days.
+Current Board Mandate: {mandate}
+
 Company Metrics:
 - Revenue: ${revenue}
 - Cash: ${cash}
-- Employee Morale: {morale}/10
+- Employee Morale: {morale}/100
+- Investor Trust: {trust}/100
 
-Your available actions:
-0 - Relax
-1 - Start New Feature
-2 - Review Code
-3 - Outbound Campaign
-4 - Customer Followups
-5 - Post Job Ad
-6 - Conduct Interviews
-7 - Team Building Event
-8 - Review Financials
-9 - Cut Costs
-10 - Customer Support
+Your available actions (Reply with ONLY the index number):
+0 - Hire Employee (Increases burn, increases progress)
+1 - Fire Employee (Decreases burn, decreases morale)
+2 - Increase Salaries (Increases morale, increases burn)
+3 - Assign Engineering Task (Increases product progress)
+4 - Launch Product (Increases revenue, uses progress)
+5 - Run Ads (Increases revenue, increases burn)
+6 - Negotiate Client (Increases revenue, increases trust)
+7 - Reduce Costs (Decreases burn, decreases morale)
+8 - Raise Funding (Increases cash, decreases trust)
+9 - Fix Bug/Crisis (Increases satisfaction, fixes crises)
+10 - Improve Culture (Increases morale, increases burn)
+11 - Give Bonuses (Decreases cash, increases morale)
+12 - Change Roadmap (Increases progress, increases tasks)
 
-Reply with ONLY a single number from 0 to 10."""
+Reply with ONLY a single number from 0 to 12."""
 
         if self.gemini_key:
             return self._call_gemini(prompt)
@@ -53,7 +61,7 @@ Reply with ONLY a single number from 0 to 10."""
         elif self.hf_token:
             return self._call_huggingface(prompt)
         else:
-            return random.randint(0, 10)
+            return random.randint(0, 12)
 
     def _call_gemini(self, prompt):
         try:
