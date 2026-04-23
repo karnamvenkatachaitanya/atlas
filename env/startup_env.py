@@ -75,7 +75,16 @@ class AtlasStartupEnv(gym.Env):
             "crises": 0.0,
             "market_trend": 0.0,
         }
+        self._sanitize_state()
         return self._obs(), {"phase": PHASES[self.phase_idx], "day": self.day, "mandate": self.mandate}
+
+    def observation(self) -> np.ndarray:
+        """Public observation accessor for training/evaluation code."""
+        return self._obs()
+
+    def state_snapshot(self) -> Dict[str, float]:
+        """Stable read-only state view to avoid accidental in-place mutation by callers."""
+        return dict(self.state)
 
     def _obs(self) -> np.ndarray:
         s = self.state
@@ -96,21 +105,53 @@ class AtlasStartupEnv(gym.Env):
         )
 
     def step(self, action: int):
-        action_name = ACTIONS[action]
+        invalid_action = not isinstance(action, (int, np.integer)) or not (0 <= int(action) < len(ACTIONS))
+        action_name = "invalid_action" if invalid_action else ACTIONS[int(action)]
         event = maybe_event()
-        reward = self._apply_action(action_name)
+        if invalid_action:
+            action_reward = -8.0
+            action_reward_breakdown = {
+                "action_reward": -8.0,
+                "business_reward": 0.0,
+                "revenue_reward": 0.0,
+                "morale_reward": 0.0,
+                "customer_reward": 0.0,
+                "trust_reward": 0.0,
+                "burn_penalty": 0.0,
+                "crisis_penalty": 0.0,
+            }
+        else:
+            action_reward, action_reward_breakdown = self._apply_action(action_name)
+        reward = action_reward
         if event:
-            reward += self._apply_event(event)
+            event_reward = self._apply_event(event)
+        else:
+            event_reward = 0.0
+
+        reward_breakdown = {
+            **action_reward_breakdown,
+            "event_reward": float(event_reward),
+            "invalid_action_penalty": -8.0 if invalid_action else 0.0,
+        }
+        reward += event_reward
 
         self.state["cash_balance"] += self.state["revenue"] - self.state["burn_rate"] / 3
         self.state["cash_balance"] = max(0, self.state["cash_balance"])
+        self._sanitize_state()
+
+        finite_ok = all(np.isfinite(v) for v in self.state.values())
+        if not finite_ok:
+            reward -= 15.0
+            reward_breakdown["finite_state_penalty"] = -15.0
+        else:
+            reward_breakdown["finite_state_penalty"] = 0.0
 
         self.phase_idx += 1
         if self.phase_idx >= 3:
             self.phase_idx = 0
             self.day += 1
 
-        terminated = self.day > self.max_days or self.state["cash_balance"] <= 0
+        terminated = self.day > self.max_days or self.state["cash_balance"] <= 0 or not finite_ok
         truncated = False
         info = {
             "day": self.day,
@@ -118,11 +159,35 @@ class AtlasStartupEnv(gym.Env):
             "event": event,
             "action_name": action_name,
             "reward": reward,
+            "invalid_action": bool(invalid_action),
+            "reward_breakdown": reward_breakdown,
         }
         return self._obs(), float(reward), terminated, truncated, info
 
-    def _apply_action(self, action: str) -> float:
-        reward = 0.0
+    def _sanitize_state(self) -> None:
+        # Clamp all mutable metrics to prevent runaway values and reward hacking.
+        self.state["cash_balance"] = float(np.clip(self.state["cash_balance"], 0.0, 2_000_000.0))
+        self.state["revenue"] = float(np.clip(self.state["revenue"], 0.0, 2_000_000.0))
+        self.state["burn_rate"] = float(np.clip(self.state["burn_rate"], 0.0, 2_000_000.0))
+        self.state["employee_morale"] = float(np.clip(self.state["employee_morale"], 0.0, 100.0))
+        self.state["product_progress"] = float(np.clip(self.state["product_progress"], 0.0, 100.0))
+        self.state["customer_satisfaction"] = float(np.clip(self.state["customer_satisfaction"], 0.0, 100.0))
+        self.state["investor_trust"] = float(np.clip(self.state["investor_trust"], 0.0, 100.0))
+        self.state["pending_tasks"] = float(np.clip(self.state["pending_tasks"], 0.0, 100.0))
+        self.state["crises"] = float(np.clip(self.state["crises"], 0.0, 20.0))
+        self.state["market_trend"] = float(np.clip(self.state["market_trend"], -100.0, 100.0))
+
+    def _apply_action(self, action: str) -> tuple[float, Dict[str, float]]:
+        reward_breakdown: Dict[str, float] = {
+            "action_reward": 0.0,
+            "business_reward": 0.0,
+            "revenue_reward": 0.0,
+            "morale_reward": 0.0,
+            "customer_reward": 0.0,
+            "trust_reward": 0.0,
+            "burn_penalty": 0.0,
+            "crisis_penalty": 0.0,
+        }
         if action == "hire_employee":
             self.state["burn_rate"] += 2000
             self.state["product_progress"] += 2
@@ -139,7 +204,7 @@ class AtlasStartupEnv(gym.Env):
         elif action == "launch_product":
             self.state["revenue"] += 7000
             self.state["product_progress"] -= 5
-            reward += 8
+            reward_breakdown["action_reward"] += 8.0
         elif action == "run_ads":
             self.state["burn_rate"] += 2500
             self.state["revenue"] += 3000
@@ -165,15 +230,22 @@ class AtlasStartupEnv(gym.Env):
             self.state["product_progress"] += 1
             self.state["pending_tasks"] += 1
 
-        reward += (
-            0.00005 * self.state["revenue"]
-            + 0.02 * self.state["employee_morale"]
-            + 0.02 * self.state["customer_satisfaction"]
-            + 0.01 * self.state["investor_trust"]
-            - 0.00004 * self.state["burn_rate"]
-            - 0.02 * self.state["crises"]
+        reward_breakdown["revenue_reward"] = 0.00005 * self.state["revenue"]
+        reward_breakdown["morale_reward"] = 0.02 * self.state["employee_morale"]
+        reward_breakdown["customer_reward"] = 0.02 * self.state["customer_satisfaction"]
+        reward_breakdown["trust_reward"] = 0.01 * self.state["investor_trust"]
+        reward_breakdown["burn_penalty"] = -0.00004 * self.state["burn_rate"]
+        reward_breakdown["crisis_penalty"] = -0.02 * self.state["crises"]
+        reward_breakdown["business_reward"] = (
+            reward_breakdown["revenue_reward"]
+            + reward_breakdown["morale_reward"]
+            + reward_breakdown["customer_reward"]
+            + reward_breakdown["trust_reward"]
+            + reward_breakdown["burn_penalty"]
+            + reward_breakdown["crisis_penalty"]
         )
-        return float(reward)
+        reward_breakdown["action_reward"] += reward_breakdown["business_reward"]
+        return float(reward_breakdown["action_reward"]), reward_breakdown
 
     def _apply_event(self, event: str) -> float:
         if event == "server_outage":
@@ -222,6 +294,9 @@ class AtlasOpenEnv(OpenEnvBase):
 
     def step(self, action: int):
         return self.core.step(action)
+
+    def observation(self):
+        return self.core.observation()
 
     def state(self):
         s = self.core.state.copy()

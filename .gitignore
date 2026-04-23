@@ -6,3 +6,4 @@ atlas.db
 frontend/dist/
 .env
 scratch/
+training/trl_ppo_out/

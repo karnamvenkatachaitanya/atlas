@@ -16,6 +16,35 @@ from openenv.core import GenericEnvClient  # noqa: F401,E402
 from env.startup_env import ACTIONS, AtlasOpenEnv  # noqa: E402
 
 
+def _load_model_and_tokenizer(model_name: str):
+    """
+    Prefer Unsloth when available for faster/cheaper SFT, fall back to Transformers.
+    """
+    use_unsloth = os.environ.get("ATLAS_USE_UNSLOTH", "1") == "1"
+    if use_unsloth:
+        try:
+            from unsloth import FastLanguageModel
+
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name=model_name,
+                max_seq_length=1024,
+                load_in_4bit=False,
+            )
+            print("Loaded model via Unsloth FastLanguageModel.")
+            return model, tokenizer
+        except Exception as exc:
+            print(f"Unsloth unavailable or failed ({exc}); falling back to Transformers.")
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    print("Loaded model via Transformers AutoModelForCausalLM.")
+    return model, tokenizer
+
+
 def _format_prompt(obs: np.ndarray, mandate: str = "General Management") -> str:
     # obs is shape (10,) from AtlasStartupEnv._obs()
     (
@@ -176,7 +205,6 @@ def main() -> None:
     SFTTrainer to fine-tune a tiny language model to imitate the heuristic policy.
     """
     from datasets import Dataset
-    from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import SFTConfig, SFTTrainer
     import matplotlib.pyplot as plt
 
@@ -189,11 +217,7 @@ def main() -> None:
     )
 
     model_name = os.environ.get("ATLAS_TRL_MODEL", "distilgpt2")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model, tokenizer = _load_model_and_tokenizer(model_name)
 
     # Reward evidence: evaluate BEFORE training.
     print("Evaluating BEFORE training... (this may take a few minutes on CPU)")
@@ -250,6 +274,8 @@ def main() -> None:
 
     # Reward evidence: evaluate AFTER training (reload from disk to match what judges re-run).
     print("Evaluating AFTER training...")
+    from transformers import AutoModelForCausalLM
+
     trained_model = AutoModelForCausalLM.from_pretrained(out_dir)
     after_rewards = evaluate_policy(model=trained_model, tokenizer=tokenizer, episodes=3)
 

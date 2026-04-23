@@ -15,6 +15,7 @@ transformers
 datasets
 torch
 unsloth
+accelerate
 openai
 requests
 google-generativeai

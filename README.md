@@ -10,7 +10,9 @@ pinned: false
 
 > **OpenEnv Hackathon 2026** — Theme: Multi-Agent Interactions + Instruction Following + Self-Improving Agents
 
-ATLAS is a real-time startup simulation where an **AI CEO** coordinates multiple autonomous department agents over a **90-day quarter**. The environment is fully OpenEnv-compliant, Gym-compatible, and designed for training with Hugging Face TRL.
+ATLAS is a real-time startup simulation where an **AI CEO** coordinates multiple autonomous department agents over a **90-day quarter**. The environment is fully OpenEnv-compliant, Gym-compatible, and designed for a two-stage learning pipeline:
+- **TRL SFT** warm-start from environment-generated trajectories (with optional **Unsloth** acceleration)
+- **TRL PPO RL** optimization using real environment rewards (action -> reward/penalty -> policy improvement)
 
 🔗 **Live Space:** https://huggingface.co/spaces/nelluru/ATLAS  
 🔗 **Live App:** https://nelluru-atlas.hf.space  
@@ -25,7 +27,7 @@ Current LLMs are good at single-turn reasoning but struggle with:
 - **Instruction Following**: Adapting strategies based on dynamic Board mandates (e.g., Growth vs. Cost-Cutting)
 - **Recovering from crises** over long horizons (90 simulated days)
 
-ATLAS trains an LLM-based CEO agent to navigate hiring, product launches, financial crises, and market shocks while strictly following strategic mandates — producing measurably better decisions after training.
+ATLAS trains an LLM-based CEO agent to navigate hiring, product launches, financial crises, and market shocks while strictly following strategic mandates. It is **not only normal fine-tuning**: after SFT initialization, policy updates continue through reinforcement learning from environment rewards.
 
 ---
 
@@ -88,14 +90,19 @@ reward = 0.00005 × revenue
 ![TRL Loss Curve](training/trl_loss_curve.png)
 *SFT training loss logged by the TRL trainer over 30 steps showing steady convergence.*
 
+### TRL PPO RL: Reward-Driven Improvement
+
+Run `python training/trl_ppo_rl.py` to execute reinforcement learning episodes where the model takes actions in the environment, receives reward/penalty signals, and updates policy via TRL PPO.
+
 ---
 
 ## Self-Improvement Strategy
 
 ATLAS is designed for recursive capability growth:
 1. **Adaptive Curricula**: The environment provides scenario presets (`startup` → `growth` → `crisis`). Agents follow an adaptive curriculum, training on stable environments before tackling high-volatility "black swan" events.
-2. **Heuristic Distillation (Expert-in-the-loop)**: The environment includes a heuristic "Expert" used to generate initial high-quality trajectories. These are distilled into the agent via SFT to establish a strong baseline.
-3. **Trajectory Filtering**: Using the dense reward signal, the system filters self-play trajectories, keeping only those that exceed the reward mean of the previous iteration for the next round of fine-tuning.
+2. **Heuristic Distillation (Expert-in-the-loop)**: The environment includes a heuristic "Expert" used to generate initial high-quality trajectories. These are distilled into the agent via TRL SFT to establish a strong baseline.
+3. **Reinforcement Optimization (TRL PPO)**: The model is then optimized online inside the environment (`training/trl_ppo_rl.py`) using dense rewards and penalties from each step.
+4. **Trajectory Filtering**: Using the reward signal, the system can filter self-play trajectories, keeping only those that exceed the reward mean of the previous iteration for the next round.
 
 ## Minimum Requirements Checklist
 
@@ -103,7 +110,9 @@ ATLAS is designed for recursive capability growth:
 |---|---|---|
 | OpenEnv (latest release) `0.2.3` | ✅ | `requirements.txt`, `openenv.yaml` |
 | OpenEnv manifest | ✅ | `openenv.yaml` (repo root) |
-| TRL training script in Colab | ✅ | `training/TRL_Colab_Minimal.ipynb` |
+| TRL SFT training script in Colab | ✅ | `training/TRL_Colab_Minimal.ipynb`, `training/trl_colab_minimal.py` |
+| TRL RL trainer (PPO) | ✅ | `training/trl_ppo_rl.py` |
+| Unsloth acceleration integrated | ✅ | `training/trl_colab_minimal.py`, `requirements.txt` |
 | Training Evidence (plots) | ✅ | `reward_curve.png`, `trl_reward_curve.png`, `trl_loss_curve.png` |
 | Mini-video < 2 min | ✅ | https://youtu.be/1aWDCkJ3Uyc |
 | Hosted on Hugging Face Spaces | ✅ | https://huggingface.co/spaces/nelluru/ATLAS |
@@ -111,15 +120,37 @@ ATLAS is designed for recursive capability growth:
 
 ---
 
+## Strict Hackathon Guidelines Compliance
+
+This project was built to **100% satisfy** the advanced RL guidelines outlined in the Meta OpenEnv Hackathon Participant Help Guide:
+
+1. **Model Acts Step-by-Step:** The simulation runs across 90 days (270 distinct phases), requiring the CEO agent to make sequential, context-aware decisions at every single step.
+2. **Success Checked by Code (Verifiable):** The `AtlasStartupEnv` computes rewards using a strict mathematical formula based on objective metrics (Revenue, Cash, Morale, Trust) rather than human opinion.
+3. **Multiple Independent Rewards & Anti-Hacking:** To prevent reward hacking, the RL loop combines environment reward, invalid-action penalties, event penalties, and an explicit reward breakdown in `info["reward_breakdown"]` so reviewers can inspect each component.
+4. **Curriculum + RL Loop:** We bootstrap with SFT (Heuristic Distillation) as recommended, then use curriculum-guided RL in `training/trl_ppo_rl.py` so the model starts from easier scenarios and only advances after it begins getting non-zero reward.
+
+---
+
 ## OpenEnv Compliance
 
 - `openenv.yaml` manifest at repo root (spec_version 1)
-- `AtlasOpenEnv` in `env/startup_env.py` subclasses `openenv.env.Env`
+- `AtlasOpenEnv` in `env/startup_env.py` subclasses `openenv.core.Environment`
 - Exposes standard Gym API: `reset()`, `step(action)`, `render()`
 - Backend endpoints at both `/api/*` and `/*` (no-prefix) for OpenEnv clients:
   - `POST /reset` — start a new episode
   - `POST /step` — take an action, get obs + reward
   - `GET /state` — current environment state
+
+Environment design (first-class artifact):
+1. **Observation**: numeric state vector (cash, revenue, burn, morale, progress, CSAT, trust, tasks, crises, trend)
+2. **Actions**: 13 discrete CEO decisions (`ACTIONS` list in `env/startup_env.py`)
+3. **Episode end**: quarter horizon reached (`max_days`) or bankruptcy (`cash_balance <= 0`) or invalid numeric state
+4. **Reward**: dense business-health formula + event bonuses/penalties
+  - Reward breakdown is exposed in `info["reward_breakdown"]` so reviewers and trainers can inspect each component
+5. **Abuse prevention**:
+  - Invalid action receives penalty and is flagged in `info["invalid_action"]`
+  - State sanitization/clamping prevents runaway values and reward hacking
+  - Hard episode cap (90-day horizon) prevents infinite loops
 
 Quick verification:
 ```bash
@@ -129,22 +160,55 @@ python training/check_openenv.py
 
 ---
 
-## TRL Training (Colab)
+## TRL Training (Colab + RL)
 
 Open [`training/TRL_Colab_Minimal.ipynb`](training/TRL_Colab_Minimal.ipynb) in Google Colab, or run:
 
 ```python
 !git clone https://github.com/Jaswanth-arjun/atlas.git
 %cd atlas
-!pip -q install openenv-core==0.2.3 gymnasium numpy matplotlib trl transformers datasets torch
+!pip -q install openenv-core==0.2.3 gymnasium numpy matplotlib trl transformers datasets torch unsloth
 !python training/trl_colab_minimal.py
+!python training/trl_ppo_rl.py
 ```
 
-The script:
+Stage 1 (`trl_colab_minimal.py`):
 1. Generates `(state → action)` pairs from the live environment
-2. Fine-tunes `distilgpt2` with TRL `SFTTrainer`
+2. Fine-tunes `distilgpt2` with TRL `SFTTrainer` (optionally loaded via Unsloth)
 3. Evaluates reward **before vs after** training
 4. Saves `training/trl_reward_curve.png` and `training/trl_loss_curve.png`
+
+Stage 2 (`trl_ppo_rl.py`):
+1. Runs model-in-the-loop episodes in the environment
+2. Uses step rewards/penalties as PPO training signal
+3. Updates policy via TRL `PPOTrainer`
+4. Saves RL-updated policy to `training/trl_ppo_out`
+5. Uses `sshleifer/tiny-gpt2` by default for low-resource smoke runs (override with `ATLAS_RL_MODEL`)
+
+Curriculum progression (easy -> medium -> hard):
+1. **Easy**: `growth` preset with short horizon
+2. **Medium**: `startup` preset with more branching and longer horizon
+3. **Hard**: `crisis` preset with the longest horizon
+
+The trainer promotes to a harder stage only after the rolling reward in the current stage is consistently above a threshold, so learning starts with early non-zero success trajectories.
+
+Optional control:
+- Set `ATLAS_RL_CURRICULUM=0` to disable curriculum and run fixed-difficulty RL.
+
+### Validate The 3 Project Conditions (Auto)
+
+Run:
+
+```bash
+python training/validate_project_conditions.py
+```
+
+This script automatically checks all three required conditions:
+1. Step-by-step action loop exists and runs for multiple steps.
+2. Success is code-verifiable using numeric reward and thresholded scoring.
+3. Task is challenging but possible (random has non-zero success, stronger policy is clearly better).
+
+The command exits with non-zero code if any condition fails.
 
 For judging, use plots produced by this TRL run (trainer logs + model evaluation), not synthetic/demo-only curves.
 
@@ -200,7 +264,7 @@ The dashboard will now show the AI making decisions in real-time!
 - **Backend:** Python 3.11, FastAPI, WebSocket, SQLite/SQLAlchemy
 - **Frontend:** React, Tailwind, Recharts dashboard
 - **Environment:** Gymnasium-compatible, OpenEnv adapter
-- **Training:** Hugging Face TRL (`SFTTrainer`), `distilgpt2`
+- **Training:** Hugging Face TRL (`SFTTrainer`, `PPOTrainer`), optional Unsloth acceleration, `distilgpt2`
 - **Hosting:** Docker, Hugging Face Spaces
 
 ---
@@ -217,6 +281,7 @@ atlas/
 ├── training/
 │   ├── train.py           # Random vs heuristic reward curve
 │   ├── trl_colab_minimal.py  # TRL SFT before/after script
+│   ├── trl_ppo_rl.py      # TRL PPO reinforcement-learning loop
 │   ├── TRL_Colab_Minimal.ipynb
 │   ├── check_openenv.py   # OpenEnv adapter smoke-test
 │   ├── reward_curve.png   # Plot: random vs heuristic
@@ -262,4 +327,4 @@ atlas/
 3. Highlight reward chart climbing as smart decisions are made
 4. Show leaderboard and replay a previous quarter
 5. Run `python training/train.py` → show `reward_curve.png` improvement
-6. Point to `training/trl_reward_curve.png` for TRL evidence
+6. Run `python training/trl_ppo_rl.py` to show reward-driven RL policy improvement
