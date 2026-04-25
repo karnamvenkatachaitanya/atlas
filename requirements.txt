@@ -20,3 +20,8 @@ openai
 requests
 google-generativeai
 anthropic
+aiohttp
+redis
+python-dotenv
+peft
+bitsandbytes

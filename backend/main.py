@@ -9,10 +9,9 @@ from fastapi.responses import FileResponse
 import backend.api as api_module
 from backend.api import router
 from backend.db import init_db
-from backend.ws_manager import WSManager
+from backend.ws_manager import manager as ws_manager
 
 app = FastAPI(title="ATLAS Backend")
-ws_manager = WSManager()
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,16 +42,20 @@ def startup():
 async def ws_endpoint(ws: WebSocket):
     await ws_manager.connect(ws)
     try:
-        sim = api_module.ensure_sim()
         while True:
-            frame = sim.step()
-            await ws_manager.broadcast("state_update", frame)
-            if frame["event"]:
-                await ws_manager.broadcast("market_event", {"event": frame["event"]["name"]})
-            await ws_manager.broadcast("reward_update", {"reward": frame["reward"]})
-            if frame["done"]:
-                await ws_manager.broadcast("episode_done", {"final_state": frame["state"]})
-                break
+            # Re-read the current sim each tick so Reset switches the live loop immediately.
+            sim = api_module.ensure_sim()
+            if sim.auto_play:
+                frame = sim.step()
+                await ws_manager.broadcast("state_update", frame)
+                if frame["event"]:
+                    await ws_manager.broadcast("market_event", {"event": frame["event"]["name"]})
+                await ws_manager.broadcast("reward_update", {"reward": frame["reward"]})
+                if frame["done"]:
+                    await ws_manager.broadcast("episode_done", {"final_state": frame["state"]})
+                    # Keep websocket alive across episodes so UI remains connected
+                    # after reset/restart. Auto-play pauses until user restarts.
+                    sim.auto_play = False
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         ws_manager.disconnect(ws)

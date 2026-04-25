@@ -26,3 +26,5 @@ class WSManager:
                 stale.append(ws)
         for ws in stale:
             self.disconnect(ws)
+
+manager = WSManager()

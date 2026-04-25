@@ -13,14 +13,15 @@ from env.startup_env import AtlasStartupEnv
 
 
 def run_episode(env: AtlasStartupEnv, policy: str = "random") -> float:
-    env.reset()
+    obs, info = env.reset()  # Get normalized obs
     done = False
     total_reward = 0.0
     while not done:
         if policy == "random":
             action = env.action_space.sample()
         else:
-            state = env.state
+            # Use state from info dict (unnormalized) for heuristic decisions
+            state = env.state_snapshot()
             if state["cash_balance"] < 100000:
                 action = 7  # reduce_costs
             elif state["customer_satisfaction"] < 60:
@@ -29,7 +30,7 @@ def run_episode(env: AtlasStartupEnv, policy: str = "random") -> float:
                 action = 3  # assign_engineering_task
             else:
                 action = 4  # launch_product
-        _, reward, terminated, truncated, _ = env.step(action)
+        obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
         done = terminated or truncated
     return total_reward

@@ -1,9 +1,55 @@
-node_modules/
-.venv/
+# Python
 __pycache__/
-*.pyc
-atlas.db
-frontend/dist/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database
+*.db
+*.sqlite3
+
+# Environment variables
 .env
-scratch/
+.env.local
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Data and Logs
+data/
+*.log
+training/trl_out/
 training/trl_ppo_out/
+training/*.png
+training/*.jsonl

@@ -19,8 +19,11 @@ from env.startup_env import ACTIONS, AtlasOpenEnv  # noqa: E402
 def _load_model_and_tokenizer(model_name: str):
     """
     Prefer Unsloth when available for faster/cheaper SFT, fall back to Transformers.
+    Supports QLoRA via bitsandbytes and peft for 7B+ models.
     """
     use_unsloth = os.environ.get("ATLAS_USE_UNSLOTH", "1") == "1"
+    use_qlora = os.environ.get("ATLAS_USE_QLORA", "1") == "1"
+    
     if use_unsloth:
         try:
             from unsloth import FastLanguageModel
@@ -28,7 +31,7 @@ def _load_model_and_tokenizer(model_name: str):
             model, tokenizer = FastLanguageModel.from_pretrained(
                 model_name=model_name,
                 max_seq_length=1024,
-                load_in_4bit=False,
+                load_in_4bit=use_qlora,
             )
             print("Loaded model via Unsloth FastLanguageModel.")
             return model, tokenizer
@@ -36,17 +39,44 @@ def _load_model_and_tokenizer(model_name: str):
             print(f"Unsloth unavailable or failed ({exc}); falling back to Transformers.")
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
-
+    
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+        
+    if use_qlora:
+        try:
+            from transformers import BitsAndBytesConfig
+            from peft import LoraConfig, get_peft_model
+            
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype="float16",
+            )
+            model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config, device_map="auto")
+            
+            peft_config = LoraConfig(
+                r=16,
+                lora_alpha=32,
+                target_modules=["q_proj", "v_proj"],
+                lora_dropout=0.05,
+                bias="none",
+                task_type="CAUSAL_LM"
+            )
+            model = get_peft_model(model, peft_config)
+            print("Loaded model via Transformers AutoModelForCausalLM with QLoRA (PEFT/BitsAndBytes).")
+            return model, tokenizer
+        except Exception as exc:
+            print(f"QLoRA setup failed ({exc}); falling back to standard loading.")
+            
     model = AutoModelForCausalLM.from_pretrained(model_name)
     print("Loaded model via Transformers AutoModelForCausalLM.")
     return model, tokenizer
 
 
-def _format_prompt(obs: np.ndarray, mandate: str = "General Management") -> str:
-    # obs is shape (10,) from AtlasStartupEnv._obs()
+def _format_prompt(obs: np.ndarray, mandate: str = "General Management", inbox: str = "") -> str:
+    # obs is shape (14,) from AtlasStartupEnv._obs(); use first 10 for state.
     (
         cash,
         revenue,
@@ -58,12 +88,19 @@ def _format_prompt(obs: np.ndarray, mandate: str = "General Management") -> str:
         pending_tasks,
         crises,
         market_trend,
-    ) = obs.tolist()
+    ) = obs[:10].tolist()
+    day_frac = float(obs[10]) if len(obs) > 10 else 0.0
 
     return (
         "You are the CEO agent in a startup simulation.\n"
-        f"Board Mandate: {mandate}\n\n"
-        "Choose ONE action from the action list that aligns with the Board Mandate.\n\n"
+        f"Board Mandate: {mandate}\n"
+        f"Day: {int(day_frac * 90)}/90\n\n"
+        "You may optionally call a tool before choosing an action.\n"
+        "Tools:\n"
+        "- finance.forecast_runway(cash_balance, burn_rate)\n"
+        "- market.risk_scan(state)\n"
+        "- org.department_report(dept, state)\n\n"
+        "Then choose ONE action from the action list that aligns with the Board Mandate.\n\n"
         f"State:\n"
         f"- cash_balance: {cash:.0f}\n"
         f"- revenue: {revenue:.0f}\n"
@@ -75,40 +112,51 @@ def _format_prompt(obs: np.ndarray, mandate: str = "General Management") -> str:
         f"- pending_tasks: {pending_tasks:.1f}\n"
         f"- crises: {crises:.1f}\n"
         f"- market_trend: {market_trend:.1f}\n\n"
+        f"Inbox Messages:\n{inbox if inbox else 'No messages.'}\n\n"
         "Actions:\n"
         + "\n".join([f"- {a}" for a in ACTIONS])
-        + "\n\nAnswer with exactly one action name.\n"
-        "Action: "
+        + "\n\nOutput format:\n"
+        "TOOL: <tool_name>(<args>)  # optional, 0 or 1 tool call\n"
+        "ACTION: <action_name>\n"
+        "TOOL: "
     )
 
 
 def _heuristic_action(obs: np.ndarray, mandate: str = "") -> str:
-    # Minimal "teacher" policy: mandate-aware to demonstrate instruction following.
+    """Teacher policy: mandate-aware, adapted for stochastic dynamics."""
     cash, revenue, burn_rate, morale, progress, csat, investor_trust, pending_tasks, crises, market_trend = (
-        obs.tolist()
+        obs[:10].tolist()
     )
     
     # Priority 1: Crisis management (always relevant)
-    if crises > 2 or csat < 40:
+    if crises > 0 or csat < 40:
         return "fix_bug_crisis"
+    # Priority 2: Prevent bankruptcy
+    if cash < 80_000:
+        return "raise_funding"
+    if cash < 150_000 or burn_rate > 30_000:
+        return "reduce_costs"
+    # Priority 3: Morale danger zone
+    if morale < 45:
+        return "improve_culture"
     
-    # Priority 2: Mandate alignment
+    # Priority 4: Mandate alignment
     m = mandate.lower()
     if "growth" in m:
-        if progress < 80: return "assign_engineering_task"
+        if progress < 60: return "assign_engineering_task"
         return "launch_product"
     if "cost" in m:
-        if cash < 300_000: return "reduce_costs"
+        if burn_rate > 20_000: return "reduce_costs"
         return "negotiate_client"
     
-    # Default: Heuristic
-    if cash < 100_000:
-        return "reduce_costs"
+    # Default: Balanced heuristic
     if csat < 60:
         return "fix_bug_crisis"
-    if progress < 55:
+    if progress < 50:
         return "assign_engineering_task"
-    return "launch_product"
+    if progress >= 60:
+        return "launch_product"
+    return "negotiate_client"
 
 
 def make_dataset(num_samples: int = 128) -> List[Tuple[str, str]]:
@@ -118,9 +166,30 @@ def make_dataset(num_samples: int = 128) -> List[Tuple[str, str]]:
     pairs: List[Tuple[str, str]] = []
     for _ in range(num_samples):
         mandate = getattr(env, "mandate", "General Management")
-        prompt = _format_prompt(obs, mandate)
+        inbox = getattr(env, "inbox", "")
+        prompt = _format_prompt(obs, mandate, inbox)
         action_name = _heuristic_action(obs, mandate)
-        pairs.append((prompt, action_name))
+        # Teach tool-use patterns in SFT:
+        # - when runway is tight or burn is high, call forecast_runway
+        # - when CSAT/crises are bad, call risk_scan
+        cash, revenue, burn_rate, morale, progress, csat, investor_trust, pending_tasks, crises, market_trend = (
+            obs[:10].tolist()
+        )
+        tool_line = ""
+        if cash < 150_000 or burn_rate > 25_000:
+            tool_line = f"finance.forecast_runway(cash_balance={int(cash)}, burn_rate={int(burn_rate)})\n"
+        elif crises > 1 or csat < 60:
+            # Provide a lightweight state summary (keeps text short).
+            tool_line = (
+                "market.risk_scan(state={"
+                f"'crises':{int(crises)},'customer_satisfaction':{int(csat)},'burn_rate':{int(burn_rate)}"
+                "})\n"
+            )
+        answer = ""
+        if tool_line:
+            answer += tool_line
+        answer += f"ACTION: {action_name}"
+        pairs.append((prompt, answer))
 
         action_idx = ACTIONS.index(action_name)
         obs, _reward, terminated, truncated, info = env.step(action_idx)
@@ -181,7 +250,12 @@ def evaluate_policy(
                 )
 
             gen = tokenizer.decode(out[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-            action_name = _parse_action_from_text(gen) or _heuristic_action(obs, mandate)
+            action_name = _parse_action_from_text(gen)
+            if action_name is None:
+                # Use random action instead of heuristic fallback so eval honestly
+                # reflects model capability without masking failures.
+                import random as _rng
+                action_name = _rng.choice(ACTIONS)
             action_idx = ACTIONS.index(action_name)
 
             obs, reward, terminated, truncated, _info = env.step(action_idx)

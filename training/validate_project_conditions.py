@@ -26,14 +26,42 @@ def random_policy(env: AtlasStartupEnv) -> int:
 
 
 def heuristic_policy(env: AtlasStartupEnv) -> int:
+    """Smarter heuristic that adapts to stochastic dynamics and avoids action spam."""
     s = env.state
-    if s["cash_balance"] < 100000:
-        return 7  # reduce_costs
-    if s["customer_satisfaction"] < 60:
-        return 9  # fix_bug_crisis
-    if s["product_progress"] < 55:
-        return 3  # assign_engineering_task
-    return 4  # launch_product
+    counts = getattr(env, "_action_counts", {})
+
+    def _pick(primary_idx: int, fallbacks: list) -> int:
+        """Pick primary action unless overused, then try fallbacks."""
+        from env.startup_env import ACTIONS as _A
+        name = _A[primary_idx]
+        if counts.get(name, 0) < 8:
+            return primary_idx
+        for fb in fallbacks:
+            if counts.get(_A[fb], 0) < 8:
+                return fb
+        return primary_idx  # last resort
+
+    # Priority 1: Active crises must be resolved immediately.
+    if s["crises"] > 0:
+        return _pick(9, [10, 6])  # fix_bug_crisis → improve_culture → negotiate
+    # Priority 2: Prevent bankruptcy.
+    if s["cash_balance"] < 80000:
+        return _pick(8, [7, 6])  # raise_funding → reduce_costs → negotiate
+    if s["cash_balance"] < 150000 or s["burn_rate"] > 30000:
+        return _pick(7, [8, 1])  # reduce_costs → raise_funding → fire
+    # Priority 3: Keep morale above danger zone.
+    if s["employee_morale"] < 45:
+        return _pick(10, [11, 2])  # improve_culture → bonuses → increase_salaries
+    # Priority 4: Customer satisfaction.
+    if s["customer_satisfaction"] < 55:
+        return _pick(9, [10, 12])  # fix_bug → culture → change_roadmap
+    # Priority 5: Build product, then launch when ready.
+    if s["product_progress"] < 50:
+        return _pick(3, [0, 12])  # engineering_task → hire → change_roadmap
+    if s["product_progress"] >= 60:
+        return _pick(4, [5, 6])  # launch → run_ads → negotiate
+    # Default: diversify revenue actions.
+    return _pick(6, [5, 4])  # negotiate → ads → launch
 
 
 def run_episode(env: AtlasStartupEnv, policy_fn: Callable[[AtlasStartupEnv], int]) -> Tuple[float, int]:
